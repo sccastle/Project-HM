@@ -4,6 +4,6 @@
 window.APP = {
   name: 'HM',
   fullName: 'HM · 家长端作业管家',
-  version: '1.3.0',
+  version: '1.4.0',
   buildDate: '2026-09-06'
 };

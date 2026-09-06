@@ -1,7 +1,7 @@
 /* service-worker.js — 离线可用的应用外壳缓存
    改版本号即可让所有设备更新缓存。 */
 
-var VERSION = 'hm-v1.3.0'; // 与 js/version.js 保持一致
+var VERSION = 'hm-v1.4.0'; // 与 js/version.js 保持一致
 var SCOPE = self.registration ? new URL(self.registration.scope).pathname : './';
 
 var ASSETS = [

@@ -71,6 +71,69 @@ window.UI = (function () {
     if (sheetCloseHandler) { var h = sheetCloseHandler; sheetCloseHandler = null; h(); }
   }
 
+  /* ---------- 长按 ---------- */
+
+  var lastLongPress = 0;
+
+  /* 长按 500ms 触发；触摸滑动会取消；电脑上右键等价 */
+  function onLongPress(el, fn) {
+    var timer = null;
+    var moved = false;
+
+    function fire(e) {
+      timer = null;
+      lastLongPress = Date.now();
+      if (navigator.vibrate) { try { navigator.vibrate(12); } catch (err) { /* 忽略 */ } }
+      fn(e);
+    }
+    function start(e) {
+      moved = false;
+      cancel();
+      timer = setTimeout(function () { if (!moved) fire(e); }, 500);
+    }
+    function cancel() { if (timer) { clearTimeout(timer); timer = null; } }
+    function move() { moved = true; cancel(); }
+
+    el.addEventListener('touchstart', start, { passive: true });
+    el.addEventListener('touchmove', move, { passive: true });
+    el.addEventListener('touchend', cancel);
+    el.addEventListener('touchcancel', cancel);
+    el.addEventListener('mousedown', start);
+    el.addEventListener('mouseup', cancel);
+    el.addEventListener('mouseleave', cancel);
+    el.addEventListener('contextmenu', function (e) { e.preventDefault(); cancel(); fire(e); });
+  }
+
+  /* 长按之后浏览器还会补一个 click，点击处理里用这个挡掉 */
+  function justLongPressed() { return Date.now() - lastLongPress < 700; }
+
+  /* 一组操作的选择弹层 */
+  function actions(opts) {
+    return new Promise(function (resolve) {
+      var settled = false;
+      var html = '<h2>' + esc(opts.title || '选择操作') + '</h2>' +
+        (opts.body ? '<p class="sheet-sub">' + esc(opts.body) + '</p>' : '') +
+        opts.items.map(function (it, i) {
+          return '<button class="pick-row' + (it.danger ? ' danger' : '') + '" data-i="' + i + '">' +
+            '<span class="pick-main"><b>' + esc(it.label) + '</b>' +
+            (it.hint ? '<span>' + esc(it.hint) + '</span>' : '') + '</span></button>';
+        }).join('') +
+        '<div class="sheet-actions"><button class="btn ghost" data-act="cancel">取消</button></div>';
+
+      openSheet(html, function (root) {
+        root.querySelectorAll('[data-i]').forEach(function (b) {
+          b.onclick = function () {
+            settled = true;
+            closeSheet();
+            resolve(opts.items[+b.dataset.i].value);
+          };
+        });
+        root.querySelector('[data-act="cancel"]').onclick = closeSheet;
+        onSheetClose(function () { if (!settled) resolve(null); });
+      });
+    });
+  }
+
   function onSheetClose(fn) { sheetCloseHandler = fn; }
 
   /* 兜底：只要没有抽屉在开着，就绝不允许背景滚动被锁住 */
@@ -191,6 +254,9 @@ window.UI = (function () {
     toast: toast,
     loading: loading,
     openSheet: openSheet,
+    onLongPress: onLongPress,
+    justLongPressed: justLongPressed,
+    actions: actions,
     unlockScrollIfIdle: unlockScrollIfIdle,
     closeSheet: closeSheet,
     onSheetClose: onSheetClose,

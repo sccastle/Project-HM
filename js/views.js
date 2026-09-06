@@ -222,7 +222,7 @@ window.Views = (function () {
         '<span class="pin-text">' + esc(x.task.text) + '</span>' +
         '<span class="pin-due">' + esc(Store.shortDate(x.date)) + ' 布置 · ' +
         esc(Store.shortDate(x.due)) + ' 截止</span></button>';
-    }).join('') + '</div>';
+    }).join('') + '<p class="hint lp-hint">长按置顶项：完成 / 改截止日 / 取消置顶</p></div>';
   }
 
   /* ================= 今天 ================= */
@@ -296,11 +296,16 @@ window.Views = (function () {
       };
     });
     view.querySelectorAll('[data-pin]').forEach(function (b) {
+      var entry = spans.filter(function (x) { return x.task.id === b.dataset.pin; })[0];
       b.onclick = function () {
+        if (UI.justLongPressed()) return;
         state.courseTab = 'homework';
         state.date = b.dataset.pinDate;
         Router.go('/course', { id: b.dataset.pinCourse, date: b.dataset.pinDate });
       };
+      if (entry) {
+        UI.onLongPress(b, function () { taskMenuFor(entry.task, entry.record, today); });
+      }
     });
 
     view.querySelectorAll('[data-course]').forEach(function (b) {
@@ -459,6 +464,43 @@ window.Views = (function () {
 
   var TYPE_TITLE = { student: '孩子要做', parent: '家长要做', reminder: '提醒 / 要带的东西' };
 
+  /* 只选一个截止日期的小弹层，长按设为阶段性作业时用 */
+  function dueSheet(current, title) {
+    return new Promise(function (resolve) {
+      var settled = false;
+      var val = current || Store.shiftKey(state.date, 7);
+      var quick = [
+        { label: '一周后', d: 7 },
+        { label: '两周后', d: 14 },
+        { label: '一个月后', d: 30 }
+      ];
+      var html = '<h2>' + esc(title || '设为阶段性作业') + '</h2>' +
+        '<p class="sheet-sub">设定截止日期后，这条会置顶显示，并倒数剩余天数。</p>' +
+        '<div class="field"><label>截止日期</label>' +
+        '<input type="date" id="due-input" value="' + esc(val) + '"></div>' +
+        '<div class="chips">' + quick.map(function (q) {
+          return '<button class="switch-chip" data-quick="' + q.d + '">' + q.label + '</button>';
+        }).join('') + '</div>' +
+        '<div class="sheet-actions"><button class="btn ghost" data-act="cancel">取消</button>' +
+        '<button class="btn primary" data-act="ok">确定</button></div>';
+
+      UI.openSheet(html, function (root) {
+        var input = root.querySelector('#due-input');
+        root.querySelectorAll('[data-quick]').forEach(function (b) {
+          b.onclick = function () { input.value = Store.shiftKey(Store.todayKey(), +b.dataset.quick); };
+        });
+        root.querySelector('[data-act="cancel"]').onclick = UI.closeSheet;
+        root.querySelector('[data-act="ok"]').onclick = function () {
+          if (!input.value) { UI.toast('请选择截止日期'); return; }
+          settled = true;
+          UI.closeSheet();
+          resolve(input.value);
+        };
+        UI.onSheetClose(function () { if (!settled) resolve(null); });
+      });
+    });
+  }
+
   /* 添加 / 编辑一条任务。阶段性作业默认关闭，打开后才要填截止日期。 */
   function taskSheet(opts) {
     return new Promise(function (resolve) {
@@ -521,8 +563,14 @@ window.Views = (function () {
 
 
   function taskRowHTML(t) {
-    return '<div class="task' + (t.completed ? ' done' : '') + (t.due ? ' span' : '') + '">' +
-      '<button class="tick' + (t.completed ? ' on' : '') + '" data-tick="' + esc(t.id) + '" aria-label="完成">✓</button>' +
+    // 阶段性作业不在这里打钩：它已经置顶了，完成 / 取消置顶都在长按菜单里做
+    var mark = t.due
+      ? '<span class="tick pinned' + (t.completed ? ' on' : '') + '" aria-hidden="true">' +
+        (t.completed ? '✓' : '★') + '</span>'
+      : '<button class="tick' + (t.completed ? ' on' : '') + '" data-tick="' + esc(t.id) +
+        '" aria-label="完成">✓</button>';
+    return '<div class="task' + (t.completed ? ' done' : '') + (t.due ? ' span' : '') +
+      '" data-task-row="' + esc(t.id) + '">' + mark +
       '<span class="task-text" data-edit="' + esc(t.id) + '">' + esc(t.text) +
       (t.due ? '<span class="due-tag' + (Store.daysLeft(t.due) < 0 ? ' over' : '') + '">' +
         esc(Store.shortDate(t.due)) + ' 截止 · ' + esc(Store.dueLabel(t.due)) + '</span>' : '') +
@@ -556,7 +604,7 @@ window.Views = (function () {
       list.forEach(function (t) { html += taskRowHTML(t); });
       html += '</div>';
     });
-    return html + '</div>';
+    return html + '<p class="hint lp-hint">长按一条作业：设为阶段性作业 / 编辑 / 删除</p></div>';
   }
 
   /* 一条任务可能属于当天的记录，也可能是别的日期延续过来的阶段性作业，
@@ -570,9 +618,86 @@ window.Views = (function () {
     return null;
   }
 
+  /* 长按一条任务弹出的操作菜单。普通任务可以设为阶段性；
+     阶段性任务可以标记完成、改截止日、取消置顶。 */
+  async function taskMenu(id, after) {
+    var f = findTask(id);
+    if (!f) return;
+    await taskMenuFor(f.task, f.rec, after);
+  }
+
+  async function taskMenuFor(t, rec, after) {
+    var f = { task: t, rec: rec };
+    var id = t.id;
+    var items;
+
+    if (t.due) {
+      items = [
+        { label: t.completed ? '标记为未完成' : '完成这项阶段性作业',
+          hint: Store.shortDate(t.due) + ' 截止 · ' + Store.dueLabel(t.due), value: 'toggle' },
+        { label: '修改截止日期', value: 'due' },
+        { label: '取消置顶', hint: '变回普通作业，用勾选框完成', value: 'unpin' },
+        { label: '编辑内容', value: 'edit' },
+        { label: '删除', danger: true, value: 'del' }
+      ];
+    } else {
+      items = [
+        { label: '设为阶段性作业', hint: '跨多天完成，会置顶并倒数天数', value: 'pin' },
+        { label: '编辑内容', value: 'edit' },
+        { label: '删除', danger: true, value: 'del' }
+      ];
+    }
+
+    var pick = await UI.actions({ title: t.text, items: items });
+    if (!pick) return;
+
+    if (pick === 'pin') {
+      var due = await dueSheet('');
+      if (!due) return;
+      t.due = due;
+      await Store.saveRecord(f.rec);
+      UI.toast('已置顶 · ' + Store.dueLabel(due));
+    } else if (pick === 'due') {
+      var nd = await dueSheet(t.due, '修改截止日期');
+      if (!nd) return;
+      t.due = nd;
+      await Store.saveRecord(f.rec);
+      UI.toast('截止日期已改为 ' + Store.shortDate(nd));
+    } else if (pick === 'unpin') {
+      delete t.due;
+      t.completed = false;
+      await Store.saveRecord(f.rec);
+      UI.toast('已取消置顶');
+    } else if (pick === 'toggle') {
+      t.completed = !t.completed;
+      await Store.saveRecord(f.rec);
+      UI.toast(t.completed ? '这项阶段性作业已完成 🎉' : '已标记为未完成');
+    } else if (pick === 'edit') {
+      var r = await taskSheet({ title: '修改任务', text: t.text, type: t.type, due: t.due });
+      if (!r) return;
+      t.text = r.text;
+      t.type = r.type;
+      if (r.due) t.due = r.due; else delete t.due;
+      await Store.saveRecord(f.rec);
+    } else if (pick === 'del') {
+      var ok = await UI.confirm({ title: '删除这条任务？', danger: true, okText: '删除' });
+      if (!ok) return;
+      f.rec.tasks = f.rec.tasks.filter(function (x) { return x.id !== id; });
+      await Store.saveRecord(f.rec);
+    }
+    if (after) after();
+  }
+
   function bindTaskEvents(c) {
+    view.querySelectorAll('[data-task-row]').forEach(function (row) {
+      UI.onLongPress(row, function () {
+        taskMenu(row.dataset.taskRow, function () { course({ id: c.id, date: state.date }); });
+      });
+    });
+
     view.querySelectorAll('[data-tick]').forEach(function (b) {
       b.onclick = async function () {
+        if (UI.justLongPressed()) return;
         var f = findTask(b.dataset.tick);
         if (!f) return;
         f.task.completed = !f.task.completed;     // 勾选只写本地，绝不调用 AI
@@ -583,6 +708,7 @@ window.Views = (function () {
     });
     view.querySelectorAll('[data-edit]').forEach(function (s) {
       s.onclick = async function () {
+        if (UI.justLongPressed()) return;
         var f = findTask(s.dataset.edit);
         if (!f) return;
         var r = await taskSheet({
@@ -598,6 +724,7 @@ window.Views = (function () {
     });
     view.querySelectorAll('[data-del]').forEach(function (b) {
       b.onclick = async function () {
+        if (UI.justLongPressed()) return;
         var f = findTask(b.dataset.del);
         if (!f) return;
         var ok = await UI.confirm({ title: '删除这条任务？', danger: true, okText: '删除' });
