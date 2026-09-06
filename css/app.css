@@ -40,12 +40,14 @@
 
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
 
+/* 滚动交给浏览器自己管：html / body 上不设 height、不设 overflow。
+   任何一个都可能让 body 变成滚动容器，在部分安卓机上表现为「页面划不动」。 */
 html, body {
   margin: 0;
   padding: 0;
-  min-height: 100%;
-  overflow-x: hidden;
 }
+
+html { -webkit-text-size-adjust: 100%; }
 
 body {
   font-family: var(--font);
@@ -54,8 +56,10 @@ body {
   font-size: 16px;
   line-height: 1.55;
   -webkit-font-smoothing: antialiased;
-  overscroll-behavior-y: none;
 }
+
+/* 打开抽屉时锁住背景滚动，锁在 html 上，关掉就一定能恢复 */
+html.sheet-open, html.sheet-open body { overflow: hidden; }
 
 button, input, textarea, select { font-family: inherit; font-size: inherit; color: inherit; }
 button { cursor: pointer; border: none; background: none; padding: 0; }
@@ -70,6 +74,9 @@ a { color: var(--blue-press); }
   min-height: 100vh;
   min-height: 100dvh;
   padding-bottom: calc(var(--nav-h) + var(--sab));
+  /* clip 只裁切、不产生滚动容器；不支持 clip 的老浏览器退回 hidden */
+  overflow-x: hidden;
+  overflow-x: clip;
 }
 
 .screen { display: none; }

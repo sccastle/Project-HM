@@ -49,7 +49,7 @@ window.UI = (function () {
   function openSheet(html, onMount) {
     sheetEl.innerHTML = html;
     maskEl.hidden = false;
-    document.body.style.overflow = 'hidden';
+    document.documentElement.classList.add('sheet-open');
     if (onMount) onMount(sheetEl);
     var firstInput = sheetEl.querySelector('input,textarea,select');
     if (firstInput && firstInput.dataset.autofocus === '1') {
@@ -66,11 +66,19 @@ window.UI = (function () {
   function closeSheet() {
     maskEl.hidden = true;
     sheetEl.innerHTML = '';
-    document.body.style.overflow = '';
+    document.documentElement.classList.remove('sheet-open');
+    document.body.style.overflow = ''; // 清掉老版本可能残留的内联锁
     if (sheetCloseHandler) { var h = sheetCloseHandler; sheetCloseHandler = null; h(); }
   }
 
   function onSheetClose(fn) { sheetCloseHandler = fn; }
+
+  /* 兜底：只要没有抽屉在开着，就绝不允许背景滚动被锁住 */
+  function unlockScrollIfIdle() {
+    if (!maskEl || !maskEl.hidden) return;
+    document.documentElement.classList.remove('sheet-open');
+    if (document.body.style.overflow) document.body.style.overflow = '';
+  }
 
   function confirm(opts) {
     return new Promise(function (resolve) {
@@ -183,6 +191,7 @@ window.UI = (function () {
     toast: toast,
     loading: loading,
     openSheet: openSheet,
+    unlockScrollIfIdle: unlockScrollIfIdle,
     closeSheet: closeSheet,
     onSheetClose: onSheetClose,
     confirm: confirm,

@@ -41,6 +41,7 @@ window.Router = (function () {
 
   async function render() {
     var r = parse();
+    UI.unlockScrollIfIdle(); // 换页时确保背景滚动没被上一页的抽屉锁住
     if (current) scrollMemo[current] = window.scrollY;
     current = r.path;
     var handler = routes[r.path] || routes['/today'];
