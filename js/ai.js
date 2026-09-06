@@ -269,12 +269,15 @@ window.AI = (function () {
 
   var ENGLISH_SYSTEM =
     '你是英语单词提取助手。用户上传的是小学英语课本或默写单词表的照片。\n' +
-    '只提取图片中出现的英文单词或固定词组，用于家长复制到背单词 App。\n' +
+    '只提取图片中出现的英文单词，用于家长复制到背单词 App。\n' +
     '要求：\n' +
-    '1. 只输出英文，不要中文翻译、不要音标、不要例句、不要解释。\n' +
-    '2. 保持图片里的原形，不要自行变形或补充图片里没有的词。\n' +
-    '3. 去掉重复。\n' +
-    '4. 只输出 JSON：{"words":["apple","teacher"]}';
+    '1. 只输出单个单词，不要词组、不要短语、不要句子。\n' +
+    '   遇到词组必须拆成单词：good morning 输出 ["good","morning"]，' +
+    'in the classroom 输出 ["in","the","classroom"]。\n' +
+    '2. 只输出英文，不要中文翻译、不要音标、不要例句、不要解释。\n' +
+    '3. 保持图片里的原形，不要自行变形或补充图片里没有的词。\n' +
+    '4. 去掉重复。\n' +
+    '5. 只输出 JSON：{"words":["apple","teacher"]}';
 
   async function extractWords(dataUrls) {
     var text = await chat(
@@ -282,7 +285,8 @@ window.AI = (function () {
       { kind: 'vision' }
     );
     var data = parseJSON(text);
-    return { words: asStringList(data.words || data.word || data.list) };
+    // AI 偶尔还是会吐词组，这里本地再拆一次，保证清单里只有单词
+    return { words: Store.splitWords(asStringList(data.words || data.word || data.list)) };
   }
 
   /* ---------- 功能四：PBL 图片 → 单词 + 核心表达 ---------- */
@@ -290,7 +294,7 @@ window.AI = (function () {
   var PBL_SYSTEM =
     '你是 PBL 英语学习材料分析助手。用户上传的是 PBL 课程的学习材料照片。\n' +
     '输出两部分：\n' +
-    '1. words：材料中出现的英文单词（去重，只要英文）。\n' +
+    '1. words：材料中出现的英文单词，只要单个单词，词组要拆开（good morning → good, morning），去重。\n' +
     '2. expressions：材料中出现的核心句型或表达，保持完整短句，例如 "This is my family." "It can grow."\n' +
     '不要翻译，不要解释，不要自行编造材料里没有的内容。\n' +
     '只输出 JSON：{"words":["plant"],"expressions":["It can grow."]}';
@@ -302,7 +306,7 @@ window.AI = (function () {
     );
     var data = parseJSON(text);
     return {
-      words: asStringList(data.words),
+      words: Store.splitWords(asStringList(data.words)),
       expressions: asStringList(data.expressions || data.keyExpressions)
     };
   }

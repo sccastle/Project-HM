@@ -512,9 +512,98 @@ input:focus, textarea:focus, select:focus { outline: none; border-color: var(--b
 }
 .chip.blue { background: var(--blue-wash); }
 .chip button { color: var(--ink-3); font-size: 15px; line-height: 1; }
+/* 重复出现过的单词，右上角标出现次数 */
+.chip .chip-n {
+  font-style: normal;
+  font-size: 11px;
+  font-weight: 800;
+  color: #fff;
+  background: var(--ink);
+  border-radius: 999px;
+  padding: 0 5px;
+  line-height: 15px;
+}
 
 .list-lines { margin: 0; padding-left: 18px; }
 .list-lines li { padding: 3px 0; font-size: 15px; }
+
+/* ---------- 阶段性作业置顶条 ---------- */
+
+.pin-wrap { display: flex; flex-direction: column; gap: 10px; margin-bottom: 14px; }
+.pin {
+  width: 100%;
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 12px 14px;
+  border: 2px solid var(--ink);
+  border-radius: 16px;
+  background: #fff8dc;
+  box-shadow: var(--shadow);
+}
+.pin.soon { background: #ffeede; }
+.pin.over { background: #fdeceb; }
+.pin.done { background: #f2f1ec; box-shadow: none; }
+.pin-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.pin-course { font-size: 12px; font-weight: 800; color: var(--ink-2); }
+.pin-left {
+  font-size: 12px;
+  font-weight: 800;
+  padding: 2px 9px;
+  border-radius: 999px;
+  border: 2px solid var(--ink);
+  background: #fff;
+}
+.pin.soon .pin-left { background: var(--yellow, #ffd23f); }
+.pin.over .pin-left { background: #e46b5f; color: #fff; border-color: #b3453a; }
+.pin-text { font-size: 16px; font-weight: 700; line-height: 1.4; overflow-wrap: anywhere; }
+.pin.done .pin-text { text-decoration: line-through; color: var(--ink-2); }
+.pin-due { font-size: 12px; color: var(--ink-2); }
+
+/* 清单里的截止标签 */
+.due-tag {
+  display: inline-block;
+  margin-left: 8px;
+  font-size: 11px;
+  font-weight: 800;
+  padding: 1px 7px;
+  border-radius: 999px;
+  border: 1.5px solid var(--ink);
+  background: #fff8dc;
+  vertical-align: 1px;
+  white-space: nowrap;
+}
+.due-tag.over { background: #fdeceb; border-color: #b3453a; color: #94322a; }
+.task-group.span-group .task-group-title::before { background: #ffd23f; }
+
+/* ---------- 作业页里可折叠的日历 ---------- */
+
+.cal-toggle {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  margin-bottom: 14px;
+  border: 2px solid var(--ink);
+  border-radius: 14px;
+  background: #fff;
+  font-weight: 700;
+  font-size: 14px;
+}
+.cal-toggle svg { width: 18px; height: 18px; }
+.cal-toggle .chev { margin-left: auto; font-size: 13px; }
+.cal-toggle.on { background: var(--blue-wash); }
+.cal-panel {
+  border: 2px solid var(--ink);
+  border-radius: 16px;
+  background: #fff;
+  padding: 12px;
+  margin: -4px 0 16px;
+  box-shadow: var(--shadow);
+}
+.cal-panel[hidden] { display: none; }
 
 /* ---------- 日历 ---------- */
 
@@ -633,7 +722,7 @@ input:focus, textarea:focus, select:focus { outline: none; border-color: var(--b
   left: 0; right: 0; bottom: 0;
   z-index: 50;
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(3, 1fr);
   background: #fff;
   border-top: 2px solid var(--ink);
   padding-bottom: var(--sab);
@@ -851,9 +940,6 @@ input:focus, textarea:focus, select:focus { outline: none; border-color: var(--b
   .content.kp > .card,
   .content.pane > .section { grid-column: auto; align-self: start; }
 
-  /* 日历：月历不要拉到整屏宽，格子太大反而难点 */
-  .content.cal .cal-head, .content.cal .cal-grid { max-width: 460px; }
-  .content.cal .day-list { max-width: 560px; }
 
   /* 宽屏下不让输入框和整块按钮无限拉长 */
   .content:not(.today):not(.kp):not(.pane) .field input,
@@ -861,7 +947,9 @@ input:focus, textarea:focus, select:focus { outline: none; border-color: var(--b
   .content:not(.today):not(.kp):not(.pane) .input-row { max-width: 560px; }
   .btn.block { max-width: 420px; margin-left: auto; margin-right: auto; }
   /* 注意：网格子项一旦有 auto 外边距就不再拉伸，这里必须显式给宽度 */
-  .date-strip, .range-bar { width: 100%; max-width: 460px; }
+  .date-strip, .range-bar, .cal-toggle { width: 100%; max-width: 460px; }
+  .cal-panel { max-width: 520px; }
+  .pin-wrap { max-width: 640px; }
   .seg { max-width: 420px; }
   .content.pane textarea { min-height: 200px; }
   .raw-text { max-height: none; }
@@ -908,22 +996,6 @@ input:focus, textarea:focus, select:focus { outline: none; border-color: var(--b
   .bottom-nav button svg { width: 24px; height: 24px; }
   .bottom-nav button.on { background: var(--blue-wash); color: var(--blue-ink); }
 
-  /* 展开横屏：左边月历，右边当天课程，一屏看完 */
-  .content.cal {
-    display: grid;
-    grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr);
-    column-gap: 26px;
-    align-content: start;
-  }
-  .content.cal .cal-head, .content.cal .cal-grid { grid-column: 1; max-width: none; }
-  .content.cal .day-list {
-    grid-column: 2;
-    grid-row: 1 / span 2;
-    margin-top: 0;
-    max-width: none;
-    align-self: start;
-  }
-
   .pane-switch {
     display: flex;
     flex-wrap: wrap;
@@ -953,14 +1025,13 @@ input:focus, textarea:focus, select:focus { outline: none; border-color: var(--b
     max-width: env(viewport-segment-width 0 0, var(--maxw));
     margin-left: 0;
   }
-  .content.today, .content.kp, .content.pane, .content.cal {
+  .content.today, .content.kp, .content.pane {
     grid-template-columns: 1fr;
   }
-  .content.cal .day-list { grid-column: 1; grid-row: auto; margin-top: 18px; }
 }
 @media (spanning: single-fold-vertical) {
   .content, .topbar > * { max-width: env(fold-left, var(--maxw)); margin-left: 0; }
-  .content.today, .content.kp, .content.pane, .content.cal { grid-template-columns: 1fr; }
+  .content.today, .content.kp, .content.pane { grid-template-columns: 1fr; }
 }
 
 /* ---------- 桌面浏览器：别撑满超宽窗口 ---------- */

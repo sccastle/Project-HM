@@ -9,7 +9,9 @@ window.Views = (function () {
     grade: null,
     courseTab: 'homework',
     calMonth: null,
-    range: { mode: 'month', from: '', to: '' }
+    range: { mode: 'month', from: '', to: '' },
+    kpTab: 'math', // 知识库分区：math 知识脉络 / english 单词
+    calOpen: false // 作业页里的日历默认收起
   };
 
   function mount() {
@@ -98,7 +100,8 @@ window.Views = (function () {
       b.onclick = function () {
         var d = Store.fromKey(state.date);
         state.calMonth = { y: d.getFullYear(), m: d.getMonth() };
-        Router.go('/calendar');
+        state.calOpen = true;
+        Router.go('/today');
       };
     });
   }
@@ -134,9 +137,10 @@ window.Views = (function () {
 
   var TASK_GROUP_TAG = { parent: '家长', reminder: '提醒' };
 
-  function courseCardHTML(c, rec) {
+  function courseCardHTML(c, rec, spanCount) {
     var n = taskCounts(rec);
     var raw = (rec && rec.rawText || '').trim();
+    var spanNote = spanCount ? ' · ' + spanCount + ' 项阶段性作业进行中' : '';
     var body;
 
     if (n.total) {
@@ -156,7 +160,9 @@ window.Views = (function () {
         (n.done >= n.total ? ' · 全部搞定 🎉' : '') + '</div>';
     } else if (raw) {
       body = '<div class="course-raw">' + esc(raw) + '</div>' +
-        '<div class="course-foot">已存原文，还没整理成清单 · 点开用 AI 整理</div>';
+        '<div class="course-foot">已存原文，还没整理成清单 · 点开用 AI 整理' + spanNote + '</div>';
+    } else if (spanCount) {
+      body = '<div class="course-foot na">今天没有新作业' + spanNote + '</div>';
     } else {
       body = '<div class="course-foot na">今天还没录入作业 · 点开录入</div>';
     }
@@ -167,6 +173,56 @@ window.Views = (function () {
       '<span class="course-name">' + esc(c.name) + '</span>' +
       '<span class="course-teacher">' + esc(c.teacherName || Store.typeLabel(c.type)) + '</span>' +
       '</span><span class="chev">›</span></div>' + body + '</div>';
+  }
+
+  /* 折叠在作业页里的日历：只当日期选择器用，选完就收起，
+     当天的作业卡片本来就在下面，不需要再列一遍 */
+  async function calendarPanelHTML(grade) {
+    var y = state.calMonth.y, m = state.calMonth.m;
+    var records = await Store.getRecordsInMonth(y, m, grade ? grade.id : '');
+    var marked = {};
+    records.forEach(function (r) {
+      if ((r.tasks && r.tasks.length) || (r.rawText || '').trim()) marked[r.date] = true;
+    });
+
+    var days = new Date(y, m + 1, 0).getDate();
+    var lead = new Date(y, m, 1).getDay();
+    var todayK = Store.todayKey();
+
+    var html = '<div class="cal-panel"' + (state.calOpen ? '' : ' hidden') + '>' +
+      '<div class="cal-head"><button data-act="pm" aria-label="上个月">‹</button>' +
+      '<span class="m">' + y + '年' + (m + 1) + '月</span>' +
+      '<button data-act="nm" aria-label="下个月">›</button></div><div class="cal-grid">';
+    ['日', '一', '二', '三', '四', '五', '六'].forEach(function (d) {
+      html += '<div class="cal-dow">' + d + '</div>';
+    });
+    for (var i = 0; i < lead; i++) html += '<div class="cal-cell blank"></div>';
+    for (var d = 1; d <= days; d++) {
+      var key = y + '-' + Store.pad(m + 1) + '-' + Store.pad(d);
+      var cls = 'cal-cell';
+      if (key === todayK) cls += ' today';
+      if (key === state.date) cls += ' sel';
+      html += '<button class="' + cls + '" data-day="' + key + '">' + d +
+        (marked[key] ? '<span class="dot"></span>' : '<span style="height:5px"></span>') + '</button>';
+    }
+    return html + '</div></div>';
+  }
+
+  /* 阶段性作业置顶条 */
+  function spanPinHTML(list, courseMap) {
+    if (!list.length) return '';
+    return '<div class="pin-wrap">' + list.map(function (x) {
+      var c = courseMap[x.courseId];
+      var left = Store.daysLeft(x.due);
+      var cls = 'pin' + (x.task.completed ? ' done' : (left < 0 ? ' over' : (left <= 2 ? ' soon' : '')));
+      return '<button class="' + cls + '" data-pin="' + esc(x.task.id) +
+        '" data-pin-course="' + esc(x.courseId) + '" data-pin-date="' + esc(x.date) + '">' +
+        '<span class="pin-top"><span class="pin-course">' + esc(c ? c.name : '课程') + '</span>' +
+        '<span class="pin-left">' + esc(Store.dueLabel(x.due)) + '</span></span>' +
+        '<span class="pin-text">' + esc(x.task.text) + '</span>' +
+        '<span class="pin-due">' + esc(Store.shortDate(x.date)) + ' 布置 · ' +
+        esc(Store.shortDate(x.due)) + ' 截止</span></button>';
+    }).join('') + '</div>';
   }
 
   /* ================= 今天 ================= */
@@ -183,7 +239,19 @@ window.Views = (function () {
     });
 
     var courses = await Store.getCourses(grade ? grade.id : '');
-    var html = dateStripHTML(state.date);
+    var courseMap = {};
+    courses.forEach(function (c) { courseMap[c.id] = c; });
+
+    // 阶段性作业置顶：还没到截止日、或者过期了还没做完的
+    var spans = (await Store.getSpanTasks(grade ? grade.id : '')).filter(function (x) {
+      return !x.task.completed;
+    });
+
+    var html = spanPinHTML(spans, courseMap) + dateStripHTML(state.date) +
+      '<button class="cal-toggle' + (state.calOpen ? ' on' : '') + '" data-act="toggle-cal">' +
+      UI.icon('calendar') + '<span>按日历选日期</span><span class="chev">' +
+      (state.calOpen ? '▴' : '▾') + '</span></button>' +
+      (await calendarPanelHTML(grade));
 
     if (!AI.hasKey()) {
       html += '<div class="banner info">还没填 API Key。勾选作业、日历、知识脉络都能正常用，' +
@@ -197,13 +265,43 @@ window.Views = (function () {
       for (var i = 0; i < courses.length; i++) {
         var c = courses[i];
         var rec = await Store.getRecord(state.date, c.id);
-        html += courseCardHTML(c, rec);
+        var sc = spans.filter(function (x) { return x.courseId === c.id; }).length;
+        html += courseCardHTML(c, rec, sc);
       }
       html += '<div class="foot-note">好习惯，未来来。 · v' + esc(APP.version) + '</div>';
     }
 
     view.innerHTML = '<div class="content today">' + html + '</div>';
     bindDateStrip(view, today);
+
+    view.querySelector('[data-act="toggle-cal"]').onclick = function () {
+      state.calOpen = !state.calOpen;
+      today();
+    };
+    var pm = view.querySelector('[data-act="pm"]');
+    if (pm) pm.onclick = function () {
+      state.calMonth.m--; if (state.calMonth.m < 0) { state.calMonth.m = 11; state.calMonth.y--; }
+      today();
+    };
+    var nm = view.querySelector('[data-act="nm"]');
+    if (nm) nm.onclick = function () {
+      state.calMonth.m++; if (state.calMonth.m > 11) { state.calMonth.m = 0; state.calMonth.y++; }
+      today();
+    };
+    view.querySelectorAll('[data-day]').forEach(function (b) {
+      b.onclick = function () {
+        state.date = b.dataset.day;
+        state.calOpen = false; // 选完就收起，下面就是这一天的作业
+        today();
+      };
+    });
+    view.querySelectorAll('[data-pin]').forEach(function (b) {
+      b.onclick = function () {
+        state.courseTab = 'homework';
+        state.date = b.dataset.pinDate;
+        Router.go('/course', { id: b.dataset.pinCourse, date: b.dataset.pinDate });
+      };
+    });
 
     view.querySelectorAll('[data-course]').forEach(function (b) {
       var open = function () { Router.go('/course', { id: b.dataset.course, date: state.date }); };
@@ -256,7 +354,7 @@ window.Views = (function () {
 
   /* ================= 课程详情 ================= */
 
-  var cur = { course: null, rec: null, gotoAI: false };
+  var cur = { course: null, rec: null, spans: [], gotoAI: false };
 
   async function course(q) {
     var c = await DB.get('courses', q.id || '');
@@ -264,6 +362,9 @@ window.Views = (function () {
     if (q.date) state.date = q.date;
     cur.course = c;
     cur.rec = await Store.ensureRecord(state.date, c);
+    // 别的日期创建、但今天仍在进行中的阶段性作业
+    cur.spans = (await Store.getSpanTasks(c.gradeId, { onDate: state.date, courseId: c.id }))
+      .filter(function (x) { return x.record.id !== cur.rec.id; });
 
     var hasAI = ['math', 'english', 'pbl'].indexOf(c.type) >= 0;
     if (!hasAI) state.courseTab = 'homework';
@@ -303,7 +404,7 @@ window.Views = (function () {
       '<button class="btn primary" data-act="ai-parse">AI 整理作业</button>' +
       '</div></div>';
 
-    html += '<div class="section"><div class="tag-head"><span>今日清单</span></div>' + tasksHTML(rec) +
+    html += '<div class="section"><div class="tag-head"><span>今日清单</span></div>' + tasksHTML(rec, cur.spans) +
       '<div class="spacer"></div><button class="btn ghost block" data-act="add-task">+ 手动添加一条</button></div>';
 
     // 拍照分析在这一屏也放一个入口，不用先切到另一个 tab 才找得到
@@ -345,9 +446,12 @@ window.Views = (function () {
     };
 
     view.querySelector('[data-act="add-task"]').onclick = async function () {
-      var text = await UI.prompt({ title: '添加一条作业', placeholder: '例如 朗读课文三遍', okText: '添加' });
-      if (!text) return;
-      cur.rec.tasks.push({ id: Store.uid('t'), text: text, type: 'student', completed: false });
+      var r = await taskSheet({ title: '添加一条作业', okText: '添加' });
+      if (!r) return;
+      cur.rec.tasks.push({
+        id: Store.uid('t'), text: r.text, type: r.type, completed: false,
+        due: r.due || undefined
+      });
       await Store.saveRecord(cur.rec);
       course({ id: c.id, date: state.date });
     };
@@ -355,54 +459,151 @@ window.Views = (function () {
 
   var TYPE_TITLE = { student: '孩子要做', parent: '家长要做', reminder: '提醒 / 要带的东西' };
 
-  function tasksHTML(rec) {
-    if (!rec.tasks || !rec.tasks.length) {
+  /* 添加 / 编辑一条任务。阶段性作业默认关闭，打开后才要填截止日期。 */
+  function taskSheet(opts) {
+    return new Promise(function (resolve) {
+      var draft = {
+        text: opts.text || '',
+        type: opts.type || 'student',
+        span: !!opts.due,
+        due: opts.due || Store.shiftKey(state.date, 7)
+      };
+      var settled = false;
+
+      function open() {
+        var html = '<h2>' + esc(opts.title || '添加一条作业') + '</h2>' +
+          '<div class="field"><label>内容</label>' +
+          '<input type="text" id="t-text" value="' + esc(draft.text) +
+          '" placeholder="例如 朗读课文三遍" data-autofocus="1"></div>' +
+          '<div class="field"><label>类型</label><div class="chips">' +
+          ['student', 'parent', 'reminder'].map(function (k) {
+            return '<button class="switch-chip' + (draft.type === k ? ' on' : '') +
+              '" data-type="' + k + '">' + TYPE_TITLE[k] + '</button>';
+          }).join('') + '</div></div>' +
+          '<div class="switch-row"><span class="switch-text"><b>阶段性作业</b>' +
+          '<span class="muted">跨多天完成的任务，会置顶并显示剩余天数</span></span>' +
+          '<button class="switch' + (draft.span ? ' on' : '') + '" id="t-span" role="switch" aria-checked="' +
+          (draft.span ? 'true' : 'false') + '"><i></i></button></div>' +
+          (draft.span
+            ? '<div class="field"><label>截止日期</label>' +
+              '<input type="date" id="t-due" value="' + esc(draft.due) + '"></div>'
+            : '') +
+          '<div class="sheet-actions"><button class="btn ghost" data-act="cancel">取消</button>' +
+          '<button class="btn primary" data-act="ok">' + esc(opts.okText || '保存') + '</button></div>';
+
+        UI.openSheet(html, function (root) {
+          var textEl = root.querySelector('#t-text');
+          function sync() {
+            draft.text = textEl.value;
+            var d = root.querySelector('#t-due');
+            if (d) draft.due = d.value || draft.due;
+          }
+          root.querySelectorAll('[data-type]').forEach(function (b) {
+            b.onclick = function () { sync(); draft.type = b.dataset.type; open(); };
+          });
+          root.querySelector('#t-span').onclick = function () { sync(); draft.span = !draft.span; open(); };
+          root.querySelector('[data-act="cancel"]').onclick = function () { UI.closeSheet(); };
+          root.querySelector('[data-act="ok"]').onclick = function () {
+            sync();
+            var text = (draft.text || '').trim();
+            if (!text) { UI.toast('内容不能为空'); return; }
+            if (draft.span && !draft.due) { UI.toast('请选择截止日期'); return; }
+            settled = true;
+            UI.closeSheet();
+            resolve({ text: text, type: draft.type, due: draft.span ? draft.due : '' });
+          };
+          UI.onSheetClose(function () { if (!settled) resolve(null); });
+        });
+      }
+      open();
+    });
+  }
+
+
+  function taskRowHTML(t) {
+    return '<div class="task' + (t.completed ? ' done' : '') + (t.due ? ' span' : '') + '">' +
+      '<button class="tick' + (t.completed ? ' on' : '') + '" data-tick="' + esc(t.id) + '" aria-label="完成">✓</button>' +
+      '<span class="task-text" data-edit="' + esc(t.id) + '">' + esc(t.text) +
+      (t.due ? '<span class="due-tag' + (Store.daysLeft(t.due) < 0 ? ' over' : '') + '">' +
+        esc(Store.shortDate(t.due)) + ' 截止 · ' + esc(Store.dueLabel(t.due)) + '</span>' : '') +
+      '</span>' +
+      '<button class="task-x" data-del="' + esc(t.id) + '" aria-label="删除">×</button></div>';
+  }
+
+  /* spans：属于别的日期、但截止日还没到的阶段性作业，也要在这一天看得到 */
+  function tasksHTML(rec, spans) {
+    spans = spans || [];
+    var own = (rec.tasks || []);
+    if (!own.length && !spans.length) {
       return emptyBox('还没有作业清单', '粘贴老师原文后点「AI 整理作业」，或者手动添加一条。');
     }
+
     var html = '<div class="card">';
+
+    // 阶段性作业置顶：本记录里的 + 从别的日期延续过来的
+    var pinned = own.filter(function (t) { return t.due; })
+      .concat(spans.map(function (x) { return x.task; }));
+    if (pinned.length) {
+      html += '<div class="task-group span-group"><div class="task-group-title">阶段性作业</div>';
+      pinned.forEach(function (t) { html += taskRowHTML(t); });
+      html += '</div>';
+    }
+
     ['student', 'parent', 'reminder'].forEach(function (type) {
-      var list = rec.tasks.filter(function (t) { return (t.type || 'student') === type; });
+      var list = own.filter(function (t) { return !t.due && (t.type || 'student') === type; });
       if (!list.length) return;
       html += '<div class="task-group ' + type + '"><div class="task-group-title">' + TYPE_TITLE[type] + '</div>';
-      list.forEach(function (t) {
-        html += '<div class="task' + (t.completed ? ' done' : '') + '">' +
-          '<button class="tick' + (t.completed ? ' on' : '') + '" data-tick="' + esc(t.id) + '" aria-label="完成">✓</button>' +
-          '<span class="task-text" data-edit="' + esc(t.id) + '">' + esc(t.text) + '</span>' +
-          '<button class="task-x" data-del="' + esc(t.id) + '" aria-label="删除">×</button></div>';
-      });
+      list.forEach(function (t) { html += taskRowHTML(t); });
       html += '</div>';
     });
     return html + '</div>';
   }
 
+  /* 一条任务可能属于当天的记录，也可能是别的日期延续过来的阶段性作业，
+     所以先按 id 找到它到底存在哪条记录里 */
+  function findTask(id) {
+    var own = (cur.rec.tasks || []).filter(function (x) { return x.id === id; })[0];
+    if (own) return { task: own, rec: cur.rec };
+    for (var i = 0; i < cur.spans.length; i++) {
+      if (cur.spans[i].task.id === id) return { task: cur.spans[i].task, rec: cur.spans[i].record };
+    }
+    return null;
+  }
+
   function bindTaskEvents(c) {
     view.querySelectorAll('[data-tick]').forEach(function (b) {
       b.onclick = async function () {
-        var t = cur.rec.tasks.filter(function (x) { return x.id === b.dataset.tick; })[0];
-        if (!t) return;
-        t.completed = !t.completed;               // 勾选只写本地，绝不调用 AI
-        await Store.saveRecord(cur.rec);
-        b.classList.toggle('on', t.completed);
-        b.closest('.task').classList.toggle('done', t.completed);
+        var f = findTask(b.dataset.tick);
+        if (!f) return;
+        f.task.completed = !f.task.completed;     // 勾选只写本地，绝不调用 AI
+        await Store.saveRecord(f.rec);
+        b.classList.toggle('on', f.task.completed);
+        b.closest('.task').classList.toggle('done', f.task.completed);
       };
     });
     view.querySelectorAll('[data-edit]').forEach(function (s) {
       s.onclick = async function () {
-        var t = cur.rec.tasks.filter(function (x) { return x.id === s.dataset.edit; })[0];
-        if (!t) return;
-        var v = await UI.prompt({ title: '修改任务', value: t.text });
-        if (!v) return;
-        t.text = v;
-        await Store.saveRecord(cur.rec);
+        var f = findTask(s.dataset.edit);
+        if (!f) return;
+        var r = await taskSheet({
+          title: '修改任务', text: f.task.text, type: f.task.type, due: f.task.due
+        });
+        if (!r) return;
+        f.task.text = r.text;
+        f.task.type = r.type;
+        if (r.due) f.task.due = r.due; else delete f.task.due;
+        await Store.saveRecord(f.rec);
         course({ id: c.id, date: state.date });
       };
     });
     view.querySelectorAll('[data-del]').forEach(function (b) {
       b.onclick = async function () {
+        var f = findTask(b.dataset.del);
+        if (!f) return;
         var ok = await UI.confirm({ title: '删除这条任务？', danger: true, okText: '删除' });
         if (!ok) return;
-        cur.rec.tasks = cur.rec.tasks.filter(function (x) { return x.id !== b.dataset.del; });
-        await Store.saveRecord(cur.rec);
+        f.rec.tasks = f.rec.tasks.filter(function (x) { return x.id !== b.dataset.del; });
+        await Store.saveRecord(f.rec);
         course({ id: c.id, date: state.date });
       };
     });
@@ -774,94 +975,10 @@ window.Views = (function () {
 
   /* ================= 日历 ================= */
 
+  /* 日历已经并进作业页，老的 #/calendar 链接直接跳过去并展开日历 */
   async function calendar() {
-    var grade = await Store.currentGrade();
-    state.grade = grade;
-    setTopbar({ title: '日历', sub: grade ? grade.name + ' · 点日期查看当天作业' : '' });
-
-    var y = state.calMonth.y, m = state.calMonth.m;
-    var records = await Store.getRecordsInMonth(y, m, grade ? grade.id : '');
-    var marked = {};
-    records.forEach(function (r) {
-      if ((r.tasks && r.tasks.length) || (r.rawText || '').trim()) marked[r.date] = true;
-    });
-
-    var first = new Date(y, m, 1);
-    var days = new Date(y, m + 1, 0).getDate();
-    var lead = first.getDay();
-    var todayK = Store.todayKey();
-
-    var html = '<div class="content cal">' +
-      '<div class="cal-head"><button data-act="pm">‹</button>' +
-      '<span class="m">' + y + '年' + (m + 1) + '月</span>' +
-      '<button data-act="nm">›</button></div><div class="cal-grid">';
-
-    ['日', '一', '二', '三', '四', '五', '六'].forEach(function (d) {
-      html += '<div class="cal-dow">' + d + '</div>';
-    });
-    for (var i = 0; i < lead; i++) html += '<div class="cal-cell blank"></div>';
-    for (var d = 1; d <= days; d++) {
-      var key = y + '-' + Store.pad(m + 1) + '-' + Store.pad(d);
-      var cls = 'cal-cell';
-      if (key === todayK) cls += ' today';
-      if (key === state.date) cls += ' sel';
-      html += '<button class="' + cls + '" data-day="' + key + '">' + d +
-        (marked[key] ? '<span class="dot"></span>' : '<span style="height:5px"></span>') + '</button>';
-    }
-    html += '</div>';
-
-    html += '<div class="day-list" id="day-list"></div></div>';
-    view.innerHTML = html;
-
-    view.querySelector('[data-act="pm"]').onclick = function () {
-      state.calMonth.m--; if (state.calMonth.m < 0) { state.calMonth.m = 11; state.calMonth.y--; }
-      calendar();
-    };
-    view.querySelector('[data-act="nm"]').onclick = function () {
-      state.calMonth.m++; if (state.calMonth.m > 11) { state.calMonth.m = 0; state.calMonth.y++; }
-      calendar();
-    };
-    view.querySelectorAll('[data-day]').forEach(function (b) {
-      b.onclick = function () { state.date = b.dataset.day; calendar(); };
-    });
-
-    await renderDayList();
-  }
-
-  async function renderDayList() {
-    var box = document.getElementById('day-list');
-    if (!box) return;
-    var grade = state.grade;
-    var courses = await Store.getCourses(grade ? grade.id : '');
-    var html = '<div class="tag-head"><span>' + esc(Store.humanDate(state.date)) + '</span></div>';
-
-    if (!courses.length) {
-      box.innerHTML = html + emptyBox('还没有课程', '先到设置里添加课程和老师。');
-      return;
-    }
-
-    var any = false;
-    for (var i = 0; i < courses.length; i++) {
-      var c = courses[i];
-      var rec = await Store.getRecord(state.date, c.id);
-      var n = taskCounts(rec);
-      var note = n.total ? n.total + ' 项 · ' + n.done + ' 项完成'
-        : ((rec && (rec.rawText || '').trim()) ? '已存原文' : '未录入');
-      if (n.total || (rec && (rec.rawText || '').trim())) any = true;
-      html += '<button class="day-row" data-course="' + esc(c.id) + '">' + avatarHTML(c) +
-        '<span class="course-main"><span class="course-name" style="font-size:16px">' + esc(c.name) + '</span>' +
-        '<span class="course-teacher">' + esc(c.teacherName || '') + '</span></span>' +
-        '<span class="n">' + esc(note) + '</span></button>';
-    }
-    if (!any) html += '<p class="muted" style="text-align:center">这天还没有记录，点课程可以直接录入。</p>';
-
-    box.innerHTML = html;
-    box.querySelectorAll('[data-course]').forEach(function (b) {
-      b.onclick = function () {
-        state.courseTab = 'homework';
-        Router.go('/course', { id: b.dataset.course, date: state.date });
-      };
-    });
+    state.calOpen = true;
+    Router.go('/today');
   }
 
   /* ================= 知识脉络 ================= */
@@ -892,14 +1009,22 @@ window.Views = (function () {
       state.range.from = r.from; state.range.to = r.to;
     }
 
-    setTopbar({ title: '数学知识脉络', sub: grade ? grade.name + ' · 看得出这段时间学过什么' : '' });
+    setTopbar({
+      title: '知识库',
+      sub: grade ? grade.name + ' · 看得出这段时间学过什么' : '',
+      extra: '<div class="seg" id="kp-seg">' +
+        '<button data-kptab="math" class="' + (state.kpTab === 'math' ? 'on' : '') + '">数学知识点</button>' +
+        '<button data-kptab="english" class="' + (state.kpTab === 'english' ? 'on' : '') + '">英语单词</button>' +
+        '</div>',
+      onMount: function (root) {
+        root.querySelectorAll('[data-kptab]').forEach(function (b) {
+          b.onclick = function () { state.kpTab = b.dataset.kptab; knowledge(); };
+        });
+      }
+    });
 
     var r2 = state.range.mode === 'custom' ? { from: state.range.from, to: state.range.to } : rangeOf(state.range.mode);
     state.range.from = r2.from; state.range.to = r2.to;
-
-    var entries = await Store.getMathKnowledge(r2.from, r2.to, grade ? grade.id : '');
-    var groups = Store.aggregate(entries);
-    var total = groups.reduce(function (n, g) { return n + g.items.length; }, 0);
 
     var html = '<div class="content kp">' +
       '<div class="range-bar">' +
@@ -919,20 +1044,57 @@ window.Views = (function () {
         esc(Store.shortDate(state.range.from)) + ' — ' + esc(Store.shortDate(state.range.to)) + '</p>';
     }
 
-    if (!total) {
-      html += emptyBox('这段时间还没有知识点', '在数学课的「AI 知识点」里上传作业照片，知识点会自动汇总到这里。');
-    } else {
-      groups.forEach(function (g) {
-        html += '<div class="card"><p class="kp-cat">' + esc(g.name) +
-          '<span class="count">' + g.items.length + ' 个</span></p>';
-        g.items.forEach(function (it) {
-          html += '<div class="kp-line"><span class="kp-name">' + esc(it.name) + '</span>' +
-            '<span class="kp-meta">首次 ' + esc(Store.shortDate(it.firstSeen)) + ' · ' + it.count + ' 次</span></div>';
+    var groups = [];
+    var words = [];
+
+    if (state.kpTab === 'math') {
+      var entries = await Store.getMathKnowledge(r2.from, r2.to, grade ? grade.id : '');
+      groups = Store.aggregate(entries);
+      var total = groups.reduce(function (n, g) { return n + g.items.length; }, 0);
+
+      if (!total) {
+        html += emptyBox('这段时间还没有知识点', '在数学课拍作业照片提取知识点，结果会自动汇总到这里。');
+      } else {
+        groups.forEach(function (g) {
+          html += '<div class="card"><p class="kp-cat">' + esc(g.name) +
+            '<span class="count">' + g.items.length + ' 个</span></p>';
+          g.items.forEach(function (it) {
+            html += '<div class="kp-line"><span class="kp-name">' + esc(it.name) + '</span>' +
+              '<span class="kp-meta">首次 ' + esc(Store.shortDate(it.firstSeen)) + ' · ' + it.count + ' 次</span></div>';
+          });
+          html += '</div>';
         });
-        html += '</div>';
-      });
-      html += '<button class="btn primary block" data-act="copy-all">复制这段时间的知识点</button>' +
-        '<p class="muted" style="text-align:center;margin-top:10px">共 ' + total + ' 个知识点，来自 ' + entries.length + ' 次分析</p>';
+        html += '<button class="btn primary block" data-act="copy-all">复制这段时间的知识点</button>' +
+          '<p class="muted" style="text-align:center;margin-top:10px">共 ' + total +
+          ' 个知识点，来自 ' + entries.length + ' 次分析</p>';
+      }
+    } else {
+      var recs = await Store.getWordRecordsRange(r2.from, r2.to, grade ? grade.id : '');
+      words = Store.aggregateWords(recs);
+
+      if (!words.length) {
+        html += emptyBox('这段时间还没有单词', '在英语或 PBL 课拍单词表照片提取单词，结果会自动汇总到这里。');
+      } else {
+        // 按日期分组，看得出这段时间的学习时间线
+        var byDate = {};
+        var dates = [];
+        words.forEach(function (w) {
+          if (!byDate[w.firstSeen]) { byDate[w.firstSeen] = []; dates.push(w.firstSeen); }
+          byDate[w.firstSeen].push(w);
+        });
+        dates.sort();
+        dates.forEach(function (d) {
+          html += '<div class="card"><p class="kp-cat">' + esc(Store.shortDate(d)) +
+            '<span class="count">' + byDate[d].length + ' 个</span></p><div class="chips">' +
+            byDate[d].map(function (w) {
+              return '<span class="chip blue">' + esc(w.word) +
+                (w.count > 1 ? '<i class="chip-n">' + w.count + '</i>' : '') + '</span>';
+            }).join('') + '</div></div>';
+        });
+        html += '<button class="btn primary block" data-act="copy-words">复制这段时间的单词</button>' +
+          '<p class="muted" style="text-align:center;margin-top:10px">共 ' + words.length +
+          ' 个单词，来自 ' + recs.length + ' 次提词</p>';
+      }
     }
 
     view.innerHTML = html + '</div>';
@@ -958,6 +1120,12 @@ window.Views = (function () {
         g.items.forEach(function (it) { if (lines.indexOf(it.name) < 0) lines.push(it.name); });
       });
       UI.copy(lines.join('\n'), '已复制 ' + lines.length + ' 个知识点');
+    };
+
+    var cw = view.querySelector('[data-act="copy-words"]');
+    if (cw) cw.onclick = function () {
+      var list = words.map(function (w) { return w.word; });
+      UI.copy(list.join('\n'), '已复制 ' + list.length + ' 个单词');
     };
   }
 

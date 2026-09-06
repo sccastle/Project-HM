@@ -279,6 +279,49 @@ window.Store = (function () {
 
   async function deleteMathKnowledge(id) { await DB.remove('mathKnowledge', id); }
 
+  /* ---------- 阶段性作业（带截止日期，跨多天） ----------
+     阶段性任务仍然存在它被创建那天的 dailyRecord 里，只是多了 due 字段。
+     这样导入导出、勾选、编辑全都沿用原来的逻辑，不引入第二套存储。 */
+
+  async function getSpanTasks(gradeId, opts) {
+    opts = opts || {};
+    var all = await DB.getAll('dailyRecords');
+    var out = [];
+    all.forEach(function (r) {
+      if (gradeId && r.gradeId && r.gradeId !== gradeId) return;
+      (r.tasks || []).forEach(function (t) {
+        if (!t.due) return;
+        if (opts.onDate && (r.date > opts.onDate || t.due < opts.onDate)) return;
+        if (opts.courseId && r.courseId !== opts.courseId) return;
+        if (opts.unfinishedOnly && t.completed) return;
+        out.push({ task: t, record: r, date: r.date, courseId: r.courseId, due: t.due });
+      });
+    });
+    out.sort(function (a, b) {
+      if (!!a.task.completed !== !!b.task.completed) return a.task.completed ? 1 : -1;
+      if (a.due !== b.due) return a.due < b.due ? -1 : 1;
+      return a.date < b.date ? -1 : 1;
+    });
+    return out;
+  }
+
+  /* 从 a 到 b 相差几天（正数表示 b 在后面） */
+  function daysBetween(a, b) {
+    var d1 = fromKey(a), d2 = fromKey(b);
+    return Math.round((d2 - d1) / 86400000);
+  }
+
+  /* 距离截止还有几天：正数还剩、0 今天到期、负数已过期 */
+  function daysLeft(due) { return daysBetween(todayKey(), due); }
+
+  function dueLabel(due) {
+    var n = daysLeft(due);
+    if (n > 1) return '还有 ' + n + ' 天';
+    if (n === 1) return '明天截止';
+    if (n === 0) return '今天截止';
+    return '已过期 ' + (-n) + ' 天';
+  }
+
   /* ---------- 英语 / PBL 提词结果 ---------- */
 
   async function saveWordRecord(entry) {
@@ -286,6 +329,69 @@ window.Store = (function () {
     entry.createdAt = entry.createdAt || Date.now();
     await DB.put('wordRecords', entry);
     return entry;
+  }
+
+  /* 按时间区间取提词结果，供「知识库 → 英语」汇总用 */
+  async function getWordRecordsRange(from, to, gradeId) {
+    var all = await DB.getAll('wordRecords');
+    return all
+      .filter(function (e) {
+        if (from && e.date < from) return false;
+        if (to && e.date > to) return false;
+        if (gradeId && e.gradeId && e.gradeId !== gradeId) return false;
+        return true;
+      })
+      .sort(function (a, b) { return a.date < b.date ? -1 : 1; });
+  }
+
+  /* 单词去重汇总：同一个词只留一条，记首次出现日期和出现次数。
+     大小写不敏感（Apple 和 apple 算同一个），展示时统一小写，I 除外。 */
+  function aggregateWords(records) {
+    var map = {};
+    var order = [];
+    (records || []).forEach(function (r) {
+      (r.words || []).forEach(function (raw) {
+        var w = normalizeWord(raw);
+        if (!w) return;
+        var key = w.toLowerCase();
+        if (!map[key]) {
+          map[key] = { word: w, firstSeen: r.date, lastSeen: r.date, count: 0 };
+          order.push(key);
+        }
+        var it = map[key];
+        it.count += 1;
+        if (r.date < it.firstSeen) it.firstSeen = r.date;
+        if (r.date > it.lastSeen) it.lastSeen = r.date;
+      });
+    });
+    return order.map(function (k) { return map[k]; }).sort(function (a, b) {
+      if (a.firstSeen !== b.firstSeen) return a.firstSeen < b.firstSeen ? -1 : 1;
+      return a.word.localeCompare(b.word);
+    });
+  }
+
+  /* 把 AI 返回的内容拆成单个单词：good morning → good, morning。
+     词内的连字符和撇号保留（T-shirt、don't 仍是一个词）。 */
+  function splitWords(list) {
+    var out = [];
+    var seen = {};
+    (list || []).forEach(function (raw) {
+      String(raw || '').split(/[^A-Za-z'\-]+/).forEach(function (piece) {
+        var w = normalizeWord(piece);
+        if (!w) return;
+        var k = w.toLowerCase();
+        if (seen[k]) return;
+        seen[k] = 1;
+        out.push(w);
+      });
+    });
+    return out;
+  }
+
+  function normalizeWord(raw) {
+    var w = String(raw || '').trim().replace(/^['\-]+|['\-]+$/g, '');
+    if (!w || !/[A-Za-z]/.test(w)) return '';
+    return w === 'I' ? 'I' : w.toLowerCase();
   }
 
   async function getWordRecords(date, courseId) {
@@ -419,7 +525,14 @@ window.Store = (function () {
     getMathKnowledgeByRecord: getMathKnowledgeByRecord,
     deleteMathKnowledge: deleteMathKnowledge,
     saveWordRecord: saveWordRecord,
+    getSpanTasks: getSpanTasks,
+    daysBetween: daysBetween,
+    daysLeft: daysLeft,
+    dueLabel: dueLabel,
     getWordRecords: getWordRecords,
+    getWordRecordsRange: getWordRecordsRange,
+    aggregateWords: aggregateWords,
+    splitWords: splitWords,
     deleteWordRecord: deleteWordRecord,
     categorize: categorize,
     aggregate: aggregate,

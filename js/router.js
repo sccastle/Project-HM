@@ -59,7 +59,7 @@ window.Router = (function () {
   var NAV_PARENT = {
     '/today': 'today',
     '/course': 'today',
-    '/calendar': 'calendar',
+    '/calendar': 'today',
     '/knowledge': 'knowledge',
     '/settings': 'settings',
     '/grades': 'settings',

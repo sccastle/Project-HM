@@ -1,10 +1,10 @@
 /* app.js — 启动入口 */
 
 (function () {
+  /* 日历并进了作业页（可折叠），所以底部只剩三个 tab */
   var NAV = [
-    { tab: 'today', label: '今天', path: '/today', icon: 'today' },
-    { tab: 'calendar', label: '日历', path: '/calendar', icon: 'calendar' },
-    { tab: 'knowledge', label: '知识', path: '/knowledge', icon: 'knowledge' },
+    { tab: 'today', label: '作业', path: '/today', icon: 'today' },
+    { tab: 'knowledge', label: '知识库', path: '/knowledge', icon: 'knowledge' },
     { tab: 'settings', label: '设置', path: '/settings', icon: 'settings' }
   ];
 
