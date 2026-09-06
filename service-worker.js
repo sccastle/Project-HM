@@ -1,13 +1,14 @@
 /* service-worker.js — 离线可用的应用外壳缓存
    改版本号即可让所有设备更新缓存。 */
 
-var VERSION = 'xiaotao-v1.0.0';
+var VERSION = 'hm-v1.1.0'; // 与 js/version.js 保持一致
 var SCOPE = self.registration ? new URL(self.registration.scope).pathname : './';
 
 var ASSETS = [
   'index.html',
   'manifest.json',
   'css/app.css',
+  'js/version.js',
   'js/db.js',
   'js/store.js',
   'js/ai.js',

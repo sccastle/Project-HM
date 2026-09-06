@@ -1,4 +1,4 @@
-# 小萄作业管家 · 家长端 PWA
+# HM · 家长端作业管家 PWA
 
 给小萄 / Henry 用的作业管理工具。把微信群里各科老师的原文按科目和日期归档，用 AI 拆成能勾选的任务清单，数学作业照片提取知识点，英语照片提取单词。
 
@@ -10,7 +10,7 @@
 
 | | 用途 | 文件 |
 |---|---|---|
-| **本地单文件版** | 现在就能用。发到微信、存到手机、双击打开 | `小萄作业管家-本地版.html` |
+| **本地单文件版** | 现在就能用。发到微信、存到手机、双击打开 | `HM-本地版.html` |
 | **GitHub Pages 版** | 长期用。能装到手机桌面、能离线、能更新 | 本仓库其余文件 |
 
 两个版本功能一样，代码同源（单文件版由 `build-single-file.js` 打包生成）。
@@ -21,7 +21,7 @@
 
 ## 一、本地单文件版怎么用
 
-**电脑：** 双击 `小萄作业管家-本地版.html`，Chrome / Edge / Safari 都行。
+**电脑：** 双击 `HM-本地版.html`，Chrome / Edge / Safari 都行。
 
 **手机：** 把这个 html 存到手机（微信文件、iCloud、QQ），用"用其他应用打开 → 浏览器"打开。iPhone 建议存到"文件"App 再打开。
 
@@ -45,7 +45,9 @@
 
 所有资源路径都是相对路径，路由走 hash（`#/today`），子目录部署不会坏，也不需要任何服务器改写规则。
 
-**更新 App：** 改完代码推上去，改一下 `service-worker.js` 顶部的 `VERSION`（例如 `xiaotao-v1.0.1`），手机上重开两次即可拿到新版。
+**更新 App：** 改完代码推上去，同时改两个地方的版本号——`js/version.js` 里的 `version` 和 `service-worker.js` 顶部的 `VERSION`（后者要写成 `hm-v` 加前者，例如 `1.1.1` 对 `hm-v1.1.1`）。两者不一致时 `node build-single-file.js` 会直接报错拦下。改完手机上把 App 关掉重开两次即可拿到新版。
+
+**怎么确认手机上跑的是哪一版：** 首页最底下和 设置 → 关于 都写着版本号。看到的号和 `js/version.js` 里的对不上，就说明还在吃旧缓存。
 
 ---
 
@@ -158,7 +160,7 @@ settings      { id, value }   // currentGradeId / endpoint / model / visionModel
 
 设置 → 数据管理。
 
-**导出：** 文件名 `xiaotao-homework-backup-YYYY-MM-DD.json`，包含所有年级、课程、老师资料和头像（Base64）、每日记录、老师原文、AI 任务、勾选状态、数学知识点、英语 / PBL 提词结果、排序、普通设置。
+**导出：** 文件名 `HM-作业备份-YYYY-MM-DD.json`，包含所有年级、课程、老师资料和头像（Base64）、每日记录、老师原文、AI 任务、勾选状态、数学知识点、英语 / PBL 提词结果、排序、普通设置。
 
 **绝不包含 API Key。**
 
@@ -184,6 +186,7 @@ js/app.js                      启动入口、底部导航、SW 注册
 manifest.json                  PWA 清单
 service-worker.js              离线缓存
 icons/                         应用图标（源自 Henry 画的花轮小车）
+js/version.js                  版本号唯一出处（App 名、版本、构建日期）
 build-single-file.js           打包成单文件：node build-single-file.js
 ```
 

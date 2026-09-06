@@ -176,7 +176,7 @@ window.Views = (function () {
     state.grade = grade;
 
     setTopbar({
-      title: '小萄作业管家',
+      title: APP.name,
       sub: grade ? '小萄 / Henry · 好习惯，未来来' : '还没有设置年级',
       pill: (grade ? grade.name : '年级') + ' ▾',
       onPill: gradeSheet
@@ -199,7 +199,7 @@ window.Views = (function () {
         var rec = await Store.getRecord(state.date, c.id);
         html += courseCardHTML(c, rec);
       }
-      html += '<div class="foot-note">好习惯，未来来。</div>';
+      html += '<div class="foot-note">好习惯，未来来。 · v' + esc(APP.version) + '</div>';
     }
 
     view.innerHTML = '<div class="content today">' + html + '</div>';
@@ -966,7 +966,7 @@ window.Views = (function () {
   async function settings() {
     var s = Store.settings;
     var grade = await Store.currentGrade();
-    setTopbar({ title: '设置', sub: '小萄作业管家 · 家长端' });
+    setTopbar({ title: '设置', sub: APP.fullName + ' · v' + APP.version });
 
     var storageNote = DB.mode === 'idb'
       ? 'IndexedDB'
@@ -1016,7 +1016,8 @@ window.Views = (function () {
       (s.keepImages ? 'true' : 'false') + '"><i></i></button></div></div>';
 
     html += '<div class="tag-head"><span>关于</span></div><div class="card">' +
-      '<p class="hint">小萄作业管家 v1.0 · 家长端 PWA<br>' +
+      '<p class="hint"><b>' + esc(APP.fullName) + '</b><br>' +
+      '版本 v' + esc(APP.version) + '（' + esc(APP.buildDate) + '构建）<br>' +
       '本地存储：' + esc(storageNote) + '<br>' +
       '所有数据保存在这台设备上，没有账号，没有云端。</p>' +
       (location.protocol === 'file:'

@@ -10,7 +10,8 @@ window.Backup = (function () {
 
   async function buildExport() {
     var payload = {
-      app: 'xiaotao-homework',
+      app: 'xiaotao-homework', // 内部标识保持不变，老备份才能继续导入
+      appVersion: APP.version,
       schemaVersion: Store.SCHEMA_VERSION,
       exportedAt: new Date().toISOString(),
       data: {}
@@ -26,7 +27,7 @@ window.Backup = (function () {
 
   function fileName() {
     var d = new Date();
-    return 'xiaotao-homework-backup-' +
+    return 'HM-作业备份-' +
       d.getFullYear() + '-' + Store.pad(d.getMonth() + 1) + '-' + Store.pad(d.getDate()) + '.json';
   }
 
@@ -65,7 +66,7 @@ window.Backup = (function () {
 
   function validate(payload) {
     if (!payload || typeof payload !== 'object') return '文件不是有效的 JSON 备份。';
-    if (payload.app && payload.app !== 'xiaotao-homework') return '这不是小萄作业管家的备份文件。';
+    if (payload.app && payload.app !== 'xiaotao-homework') return '这不是本 App 的备份文件。';
     if (!payload.data || typeof payload.data !== 'object') return '备份缺少 data 字段，无法恢复。';
     var v = payload.schemaVersion;
     if (typeof v !== 'number') return '备份缺少 schemaVersion，无法确认版本。';
