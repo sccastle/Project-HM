@@ -256,7 +256,7 @@ window.Views = (function () {
 
   /* ================= 课程详情 ================= */
 
-  var cur = { course: null, rec: null };
+  var cur = { course: null, rec: null, gotoAI: false };
 
   async function course(q) {
     var c = await DB.get('courses', q.id || '');
@@ -306,6 +306,13 @@ window.Views = (function () {
     html += '<div class="section"><div class="tag-head"><span>今日清单</span></div>' + tasksHTML(rec) +
       '<div class="spacer"></div><button class="btn ghost block" data-act="add-task">+ 手动添加一条</button></div>';
 
+    // 拍照分析在这一屏也放一个入口，不用先切到另一个 tab 才找得到
+    if (['math', 'english', 'pbl'].indexOf(c.type) >= 0) {
+      html += '<div class="section"><div class="tag-head"><span>' + esc(photoLabel(c)) + '</span></div>' +
+        '<p class="hint">' + esc(photoTip(c)) + '</p><div class="spacer"></div>' +
+        '<button class="btn dark block" data-act="pick-here">' + esc(photoBtn(c)) + '</button></div>';
+    }
+
     html += '</div>';
     view.innerHTML = html;
     bindDateStrip(view, function () { course({ id: c.id, date: state.date }); });
@@ -325,6 +332,9 @@ window.Views = (function () {
       await Store.saveRecord(cur.rec);
       UI.toast('原文已保存');
     };
+
+    var pickHere = view.querySelector('[data-act="pick-here"]');
+    if (pickHere) pickHere.onclick = function () { pickAndAnalyze(c, { gotoAI: true }); };
 
     view.querySelector('[data-act="ai-parse"]').onclick = async function () {
       var raw = view.querySelector('#raw').value.trim();
@@ -478,6 +488,25 @@ window.Views = (function () {
     open();
   }
 
+  /* 拍照分析的文案：数学是提知识点，英语 / PBL 是提单词 */
+
+  function photoLabel(c) {
+    return c.type === 'math' ? '拍作业提知识点'
+      : (c.type === 'pbl' ? '拍材料提单词和表达' : '拍单词表提单词');
+  }
+
+  function photoBtn(c) {
+    return c.type === 'math' ? '拍照 / 选图 → 提取知识点'
+      : (c.type === 'pbl' ? '拍照 / 选图 → 提取单词和表达' : '拍照 / 选图 → 提取单词');
+  }
+
+  function photoTip(c) {
+    return c.type === 'math'
+      ? 'AI 只分析题目考查了哪些知识点，不给答案、不出练习题。结果会存进「知识」页的知识脉络。'
+      : (c.type === 'pbl' ? 'AI 提取材料里的单词和核心表达，复制后可以粘到别的 App。'
+        : 'AI 只提取英文单词，不输出中文、音标和例句。');
+  }
+
   /* ---------- AI tab（数学 / 英语 / PBL） ---------- */
 
   async function renderCourseAI(c) {
@@ -491,15 +520,9 @@ window.Views = (function () {
         esc(Store.DEFAULT_VISION_MODEL) + ' 就能拍照分析了。</div>';
     }
 
-    var label = c.type === 'math' ? '数学作业照片' : (c.type === 'pbl' ? 'PBL 学习材料' : '默写单词照片');
-    var tip = c.type === 'math'
-      ? 'AI 只分析题目考查了哪些知识点，不给答案、不出练习题。'
-      : (c.type === 'pbl' ? 'AI 提取材料里的单词和核心表达，复制后可以粘到别的 App。'
-        : 'AI 只提取英文单词，不输出中文、音标和例句。');
-
-    html += '<div class="section"><div class="tag-head"><span>' + esc(label) + '</span></div>' +
-      '<p class="hint">' + esc(tip) + '</p><div class="spacer"></div>' +
-      '<button class="btn primary block" data-act="pick">拍照 / 选择图片</button>' +
+    html += '<div class="section"><div class="tag-head"><span>' + esc(photoLabel(c)) + '</span></div>' +
+      '<p class="hint">' + esc(photoTip(c)) + '</p><div class="spacer"></div>' +
+      '<button class="btn primary block" data-act="pick">' + esc(photoBtn(c)) + '</button>' +
       '<p class="muted" style="margin-top:8px">' +
       (Store.settings.keepImages ? '当前设置：分析后保留原图。' : '默认分析完就释放图片，只保存文字结果，App 不会越用越大。') +
       '</p></div>';
@@ -604,7 +627,8 @@ window.Views = (function () {
     });
   }
 
-  async function pickAndAnalyze(c) {
+  async function pickAndAnalyze(c, opts) {
+    cur.gotoAI = !!(opts && opts.gotoAI); // 从作业 tab 发起时，保存后直接把结果那一页显示出来
     if (!navigator.onLine) { UI.toast('当前离线，AI 功能需要网络。'); return; }
     if (!AI.hasKey()) { UI.toast('请先到设置里填写 API Key'); return; }
     if (!AI.visionReady()) {
@@ -693,6 +717,7 @@ window.Views = (function () {
           });
           UI.closeSheet();
           UI.toast('已保存到 ' + Store.shortDate(state.date));
+          if (cur.gotoAI) { state.courseTab = 'ai'; cur.gotoAI = false; }
           course({ id: c.id, date: state.date });
         };
       });
@@ -739,6 +764,7 @@ window.Views = (function () {
           });
           UI.closeSheet();
           UI.toast('已保存 ' + draft.words.length + ' 个单词');
+          if (cur.gotoAI) { state.courseTab = 'ai'; cur.gotoAI = false; }
           course({ id: c.id, date: state.date });
         };
       });

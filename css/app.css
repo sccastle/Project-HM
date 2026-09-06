@@ -43,7 +43,7 @@
 html, body {
   margin: 0;
   padding: 0;
-  height: 100%;
+  min-height: 100%;
   overflow-x: hidden;
 }
 
@@ -65,7 +65,10 @@ a { color: var(--blue-press); }
 /* ---------- 布局骨架 ---------- */
 
 #app {
-  min-height: 100%;
+  /* 用 vh 而不是 100%：html / body 不再定高，整页交给浏览器滚，
+     地址栏能自动收起，切页时 window.scrollTo(0,0) 也才真的有效 */
+  min-height: 100vh;
+  min-height: 100dvh;
   padding-bottom: calc(var(--nav-h) + var(--sab));
 }
 
