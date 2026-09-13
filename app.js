@@ -40,7 +40,26 @@
     if (!('serviceWorker' in navigator)) return;
     if (location.protocol === 'file:') return; // 本地单文件版没有 SW
     var base = location.pathname.replace(/[^/]*$/, '');
+
+    // 页面加载时就已经被某个 SW 接管，说明这是老版本在跑；
+    // 等新 SW 接管后自动刷一次，用户不用自己反复退出重进。
+    var hadController = !!navigator.serviceWorker.controller;
+    var reloaded = false;
+    navigator.serviceWorker.addEventListener('controllerchange', function () {
+      if (!hadController || reloaded) return;
+      reloaded = true;
+      location.reload();
+    });
+
     navigator.serviceWorker.register(base + 'service-worker.js', { scope: base })
+      .then(function (reg) {
+        window.__swReg = reg;
+        reg.update().catch(function () {});
+        // 应用重新回到前台时顺便查一次更新
+        document.addEventListener('visibilitychange', function () {
+          if (document.visibilityState === 'visible') reg.update().catch(function () {});
+        });
+      })
       .catch(function () { /* 注册失败不影响使用 */ });
   }
 

@@ -1,22 +1,22 @@
 /* service-worker.js — 离线可用的应用外壳缓存
    改版本号即可让所有设备更新缓存。 */
 
-var VERSION = 'hm-v1.5.1'; // 与 js/version.js 保持一致
+var VERSION = 'hm-v1.5.2'; // 与 js/version.js 保持一致
 var SCOPE = self.registration ? new URL(self.registration.scope).pathname : './';
 
 var ASSETS = [
   'index.html',
   'manifest.json',
-  'css/app.css',
-  'js/version.js',
-  'js/db.js',
-  'js/store.js',
-  'js/ai.js',
-  'js/ui.js',
-  'js/backup.js',
-  'js/router.js',
-  'js/views.js',
-  'js/app.js',
+  'css/app.css?v=1.5.2',
+  'js/version.js?v=1.5.2',
+  'js/db.js?v=1.5.2',
+  'js/store.js?v=1.5.2',
+  'js/ai.js?v=1.5.2',
+  'js/ui.js?v=1.5.2',
+  'js/backup.js?v=1.5.2',
+  'js/router.js?v=1.5.2',
+  'js/views.js?v=1.5.2',
+  'js/app.js?v=1.5.2',
   'icons/icon-64.png',
   'icons/icon-192.png',
   'icons/icon-512.png',
@@ -47,6 +47,11 @@ self.addEventListener('activate', function (e) {
   );
 });
 
+// 页面可以主动要求立刻接管
+self.addEventListener('message', function (e) {
+  if (e.data === 'skip-waiting') self.skipWaiting();
+});
+
 self.addEventListener('fetch', function (e) {
   var req = e.request;
   if (req.method !== 'GET') return;                 // AI 的 POST 请求直接放行
@@ -68,7 +73,7 @@ self.addEventListener('fetch', function (e) {
     caches.match(req).then(function (cached) {
       if (cached) {
         // 后台顺带更新
-        fetch(req).then(function (res) {
+        fetch(new Request(req.url, { cache: 'reload' })).then(function (res) {
           if (res && res.ok) caches.open(VERSION).then(function (c) { c.put(req, res.clone()); });
         }).catch(function () {});
         return cached;

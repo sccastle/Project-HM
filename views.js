@@ -1319,7 +1319,11 @@ window.Views = (function () {
       (location.protocol === 'file:'
         ? '<p class="hint" style="margin-top:8px">当前是本地单文件模式。作业、日历、知识脉络都能正常用；' +
           '部分浏览器会拦截本地文件发出的跨域请求，如果 AI 报网络错误，改用网页版即可。</p>'
-        : '') +
+        : '<div class="spacer"></div><div class="btn-row">' +
+          '<button class="btn ghost" data-act="check-update">检查更新</button>' +
+          '<button class="btn ghost" data-act="hard-reload">清缓存重载</button></div>' +
+          '<p class="hint" style="margin-top:8px">版本号和网页上的对不上，说明还在用缓存里的旧文件，' +
+          '点「清缓存重载」最彻底。</p>') +
       '</div>';
 
     html += '<div class="foot-note">小萄 / Henry 同学，加油！</div></div>';
@@ -1349,6 +1353,39 @@ window.Views = (function () {
       await saveApi();
       UI.toast('设置已保存到本机');
       view.querySelector('#api-status').textContent = AI.hasKey() ? '已填写 API Key。' : '还没有填写 API Key。';
+    };
+
+    var cu = view.querySelector('[data-act="check-update"]');
+    if (cu) cu.onclick = async function () {
+      UI.loading(true, '正在检查更新…');
+      try {
+        if (window.__swReg) await window.__swReg.update();
+      } catch (e) { /* 忽略 */ }
+      UI.loading(false);
+      UI.toast('已检查，正在重新加载');
+      setTimeout(function () { location.reload(); }, 600);
+    };
+
+    var hr = view.querySelector('[data-act="hard-reload"]');
+    if (hr) hr.onclick = async function () {
+      var ok = await UI.confirm({
+        title: '清缓存并重新加载？',
+        body: '只清掉缓存的程序文件，作业数据不受影响。',
+        okText: '清缓存'
+      });
+      if (!ok) return;
+      UI.loading(true, '正在清理…');
+      try {
+        if (window.caches) {
+          var keys = await caches.keys();
+          await Promise.all(keys.map(function (k) { return caches.delete(k); }));
+        }
+        if (navigator.serviceWorker) {
+          var regs = await navigator.serviceWorker.getRegistrations();
+          await Promise.all(regs.map(function (r) { return r.unregister(); }));
+        }
+      } catch (e) { /* 忽略 */ }
+      location.reload();
     };
 
     view.querySelector('[data-act="test"]').onclick = async function () {

@@ -32,11 +32,27 @@ if (swVer !== 'hm-v' + appVer) {
   process.exit(1);
 }
 
-let html = read('index.html');
+// 0.5 给 css / js 打上 ?v=版本号 的戳，写回 index.html 和 service-worker.js。
+//     GitHub Pages 会给静态文件带 max-age，不打戳的话浏览器可能几十分钟内
+//     一直用旧的 js，页面上就会出现「版本号还是上一版」。
+function stamp(text) {
+  return text
+    .replace(/(css\/app\.css|js\/[a-z-]+\.js)(\?v=[^"']*)?/g, '$1?v=' + appVer);
+}
+
+const stampedIndex = stamp(read('index.html'));
+fs.writeFileSync(path.join(ROOT, 'index.html'), stampedIndex, 'utf8');
+
+const swSrc = read('service-worker.js');
+const swStamped = swSrc.replace(/'(css\/app\.css|js\/[a-z-]+\.js)(\?v=[^']*)?'/g,
+  "'$1?v=" + appVer + "'");
+if (swStamped !== swSrc) fs.writeFileSync(path.join(ROOT, 'service-worker.js'), swStamped, 'utf8');
+
+let html = stampedIndex;
 
 // 1. 内联样式
 html = html.replace(
-  '<link rel="stylesheet" href="css/app.css">',
+  new RegExp('<link rel="stylesheet" href="css/app\\.css(\\?v=[^"]*)?">'),
   '<style>\n' + read('css/app.css') + '\n</style>'
 );
 
@@ -48,9 +64,11 @@ html = html
 
 // 3. 内联脚本
 const scripts = JS_FILES.map(f => read(f)).join('\n;\n');
-const scriptTags = JS_FILES.map(f => '<script src="' + f + '"></script>').join('\n');
+const scriptTags = JS_FILES
+  .map(f => '<script src="' + f + '\\?v=[^"]*"></script>')
+  .join('\\n');
 html = html.replace(
-  scriptTags,
+  new RegExp(scriptTags.replace(/\//g, '\\/')),
   '<script>window.INLINE_ICON=' + JSON.stringify(dataURI('icons/icon-64.png')) + ';</script>\n' +
   '<script>\n' + scripts + '\n</script>'
 );
