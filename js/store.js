@@ -13,12 +13,16 @@ window.Store = (function () {
     { key: 'other', label: '其他', icon: '·' }
   ];
 
-  /* DeepSeek 2026-08 起的在售模型：deepseek-v4-flash / deepseek-v4-pro /
-     deepseek-v4-flash-vision-exp（唯一能收图片的那个）。
-     旧的 deepseek-chat 命名已经不在官方模型列表里了。 */
+  /* 2026-09-10：DeepSeek V4.1-Flash 正式版上线，模型名统一成 deepseek-flash，
+     原生支持图片，所以文字和图片用同一个模型就够了。
+     上一代 deepseek-v4-flash / deepseek-v4-flash-vision-exp 已下线，
+     官方暂时把这两个名字转发到 V4.1-Flash，但不保证一直转发，所以这里直接迁移掉。 */
   var DEFAULT_ENDPOINT = 'https://api.deepseek.com/chat/completions';
-  var DEFAULT_MODEL = 'deepseek-v4-flash';
-  var DEFAULT_VISION_MODEL = 'deepseek-v4-flash-vision-exp';
+  var DEFAULT_MODEL = 'deepseek-flash';
+  var DEFAULT_VISION_MODEL = 'deepseek-flash';
+
+  /* 这些是历史默认值，遇到就升级；用户自己填的别的名字一律不动 */
+  var LEGACY_MODELS = ['deepseek-chat', 'deepseek-v4-flash', 'deepseek-v4-flash-vision-exp'];
 
   var settings = {
     apiKey: '',
@@ -461,17 +465,18 @@ window.Store = (function () {
   /* 老版本装过的设备：把停用的 deepseek-chat 换成在售模型，
      图片模型没填过的补上视觉模型。只做一次，用户手改过的不覆盖。 */
   async function migrateModelNames() {
-    if (settings.modelsMigrated === 'v4') return;
-    if (!settings.model || settings.model === 'deepseek-chat') {
+    if (settings.modelsMigrated === 'v4.1') return;
+    var isLegacy = function (v) { return !v || LEGACY_MODELS.indexOf(v) >= 0; };
+    if (isLegacy((settings.model || '').trim())) {
       await setSetting('model', DEFAULT_MODEL);
     }
-    if (!(settings.visionModel || '').trim()) {
+    if (isLegacy((settings.visionModel || '').trim())) {
       await setSetting('visionModel', DEFAULT_VISION_MODEL);
     }
     if (!(settings.endpoint || '').trim()) {
       await setSetting('endpoint', DEFAULT_ENDPOINT);
     }
-    await setSetting('modelsMigrated', 'v4');
+    await setSetting('modelsMigrated', 'v4.1');
   }
 
   async function bootstrap() {

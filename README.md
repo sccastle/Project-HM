@@ -69,13 +69,15 @@
 |---|---|
 | API Key | 到 platform.deepseek.com 申请，形如 `sk-…` |
 | API Endpoint | `https://api.deepseek.com/chat/completions` |
-| 文字模型 | `deepseek-v4-flash` |
-| 图片模型 | `deepseek-v4-flash-vision-exp` |
+| 文字模型 | `deepseek-flash` |
+| 图片模型 | `deepseek-flash`（同一个模型，原生支持图片） |
 | 图片模型 Endpoint | 留空即可，和文字模型同一个地址 |
 
 以上是默认值，装好就是这套，只需要填 API Key。填完点"测试连接"，会发一个最小请求验证 Key 是否可用。
 
-**关于模型名：** DeepSeek 在 2026 年 8 月 21 日上线了视觉模型 `deepseek-v4-flash-vision-exp`，这是官方目前唯一能接收图片的模型，其他模型收到图片会返回 400「This model does not support image」。当前在售的模型是 `deepseek-v4-flash`、`deepseek-v4-pro` 和 `deepseek-v4-flash-vision-exp`，旧的 `deepseek-chat` 已不在官方模型列表里。老版本装过这个 App 的设备，升级后会自动把 `deepseek-chat` 换成 `deepseek-v4-flash` 并补上图片模型，手动改过的配置不会被覆盖。
+**关于模型名：** 2026 年 9 月 10 日 DeepSeek V4.1-Flash 正式上线，模型名统一成 `deepseek-flash`，原生支持图片理解，所以文字和图片用同一个模型就够了。上一代的 `deepseek-v4-flash` 和 `deepseek-v4-flash-vision-exp` 已经下线，官方暂时把这两个名字转发到 V4.1-Flash，但没说会转发多久，所以 App 会把这些历史默认值自动迁移到 `deepseek-flash`（`deepseek-chat` 同理）。用户自己填过的其他模型名一律不动。
+
+图片模型和 Endpoint 仍然是分开可配的，想换别家支持图片的 OpenAI 兼容接口随时可以。
 
 **关于图片分析：** 数学知识点、英语提词、PBL 提词都走视觉模型。图片在手机上压缩到 1024px 长边、转成 Base64 data URL，按 OpenAI 兼容的 `image_url` content block 发出去（官方给图片的三种传法里最适合本地文件的一种）。DeepSeek 服务端会把图片缩到约 800×800 的总像素，每张图最多计 384 token，所以压缩到 1024 既够清楚也不浪费流量。
 

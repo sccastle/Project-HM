@@ -1292,9 +1292,10 @@ window.Views = (function () {
       '<input type="text" id="s-vmodel" value="' + esc(s.visionModel) + '" placeholder="' + Store.DEFAULT_VISION_MODEL + '"></div>' +
       '<div class="field"><label>图片模型 Endpoint（留空则同上）</label>' +
       '<input type="text" id="s-vep" value="' + esc(s.visionEndpoint) + '" placeholder="同上，除非图片模型在别家"></div>' +
-      '<p class="hint">DeepSeek 现在能读图片了：图片模型填 ' + Store.DEFAULT_VISION_MODEL +
-      '，和文字模型共用同一个 Key 和 Endpoint。文字模型填 ' + Store.DEFAULT_MODEL +
-      '（旧的 deepseek-chat 已不在官方模型列表里）。</p>' +
+      '<p class="hint">DeepSeek V4.1-Flash 原生支持图片，所以两个模型都填 ' +
+      Store.DEFAULT_MODEL + ' 就行，共用同一个 Key 和 Endpoint。' +
+      '上一代的 deepseek-v4-flash 和 deepseek-v4-flash-vision-exp 已经下线，' +
+      '官方只是暂时把这两个名字转发过来。</p>' +
       '<div class="btn-row"><button class="btn ghost" data-act="test">测试连接</button>' +
       '<button class="btn primary" data-act="save-api">保存</button></div>' +
       '<p id="api-status" class="muted" style="margin-top:10px">' +
